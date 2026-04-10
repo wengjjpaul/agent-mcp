@@ -90,15 +90,31 @@ Once connected, talk to your MCP client naturally:
 | *"Update code-reviewer to also check performance"* | `update_agent` → modifies specific fields |
 | *"Delete the old test agent"* | `delete_agent` → removes it |
 
+### Naming Your Agents
+
+Every agent can have a human-friendly `display_name` (e.g. "Bob", "Maya the Reviewer"). You can then address agents by their name directly:
+
+| You say | What happens |
+|---------|--------------|
+| *"Create a research assistant named Bob"* | Creates agent with `display_name: "Bob"` |
+| *"hi bob, how are you?"* | `ask_agent("Bob", ...)` → returns Bob's persona + your message as a prompt; LLM responds as Bob |
+| *"bob, what do you do?"* | `ask_agent("Bob", ...)` → Bob describes his capabilities in character |
+| *"Can you ask bob to write a story"* | `ask_agent("Bob", ...)` → Bob writes a story in his own voice |
+| *"Rename Bob to Bobby"* | `update_agent("Bob", { display_name: "Bobby" })` |
+| *"What can Maya do?"* | `get_agent("Maya")` → looks up agent by display name |
+
+Agent lookup works by ID, `name` (the slug identifier), or `display_name` — all case-insensitive.
+
 ## Tools
 
 | Tool | Description |
 |------|-------------|
 | `list_agents` | List all agents with name, description, and creation date |
-| `get_agent` | Get full details of an agent by name or ID |
+| `get_agent` | Get full details of an agent by name, display name, or ID |
 | `create_agent` | Create a new agent (name required, all other fields optional) |
 | `update_agent` | Update any fields on an existing agent |
-| `delete_agent` | Delete an agent by name or ID |
+| `delete_agent` | Delete an agent by name, display name, or ID |
+| `ask_agent` | Talk to an agent — returns the agent's persona + your message as a prompt for the LLM to respond in character |
 
 ## Agent Schema
 
@@ -107,6 +123,7 @@ Each agent is defined by:
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | `string` | **Required.** Unique identifier (e.g. `code-reviewer`) |
+| `display_name` | `string` | Human-friendly name (e.g. `Bob`, `Maya the Reviewer`) |
 | `description` | `string` | Short summary of what the agent does |
 | `instructions` | `string` | Detailed behavioral instructions and workflow |
 | `soul` | `string` | Personality, tone, and communication style |

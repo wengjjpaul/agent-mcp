@@ -5,6 +5,7 @@ import pg from "pg";
 export interface Agent {
   id: number;
   name: string;
+  display_name: string | null;
   description: string | null;
   instructions: string | null;
   soul: string | null;
@@ -16,6 +17,7 @@ export interface Agent {
 
 export interface CreateAgentInput {
   name: string;
+  display_name?: string;
   description?: string;
   instructions?: string;
   soul?: string;
@@ -25,6 +27,7 @@ export interface CreateAgentInput {
 
 export interface UpdateAgentInput {
   name?: string;
+  display_name?: string;
   description?: string;
   instructions?: string;
   soul?: string;
@@ -59,6 +62,7 @@ function createSqliteAdapter(dbPath: string): DbAdapter {
     CREATE TABLE IF NOT EXISTS agents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
+      display_name TEXT,
       description TEXT,
       instructions TEXT,
       soul TEXT,
@@ -69,13 +73,20 @@ function createSqliteAdapter(dbPath: string): DbAdapter {
     );
   `);
 
+  const cols = db.prepare("PRAGMA table_info(agents)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "display_name")) {
+    db.exec("ALTER TABLE agents ADD COLUMN display_name TEXT");
+  }
+
   function getSync(idOrName: string): Agent | undefined {
     const asNum = Number(idOrName);
     if (!isNaN(asNum) && String(asNum) === idOrName) {
       const byId = db.prepare("SELECT * FROM agents WHERE id = ?").get(asNum) as Agent | undefined;
       if (byId) return byId;
     }
-    return db.prepare("SELECT * FROM agents WHERE name = ? COLLATE NOCASE").get(idOrName) as Agent | undefined;
+    const byName = db.prepare("SELECT * FROM agents WHERE name = ? COLLATE NOCASE").get(idOrName) as Agent | undefined;
+    if (byName) return byName;
+    return db.prepare("SELECT * FROM agents WHERE display_name = ? COLLATE NOCASE").get(idOrName) as Agent | undefined;
   }
 
   return {
@@ -87,10 +98,11 @@ function createSqliteAdapter(dbPath: string): DbAdapter {
     },
     async createAgent(input) {
       const result = db.prepare(`
-        INSERT INTO agents (name, description, instructions, soul, tools, skills)
-        VALUES (@name, @description, @instructions, @soul, @tools, @skills)
+        INSERT INTO agents (name, display_name, description, instructions, soul, tools, skills)
+        VALUES (@name, @display_name, @description, @instructions, @soul, @tools, @skills)
       `).run({
         name: input.name,
+        display_name: input.display_name ?? null,
         description: input.description ?? null,
         instructions: input.instructions ?? null,
         soul: input.soul ?? null,
@@ -106,7 +118,7 @@ function createSqliteAdapter(dbPath: string): DbAdapter {
       const fields: string[] = [];
       const values: Record<string, unknown> = { id: existing.id };
 
-      for (const key of ["name", "description", "instructions", "soul", "tools", "skills"] as const) {
+      for (const key of ["name", "display_name", "description", "instructions", "soul", "tools", "skills"] as const) {
         if (input[key] !== undefined) {
           fields.push(`${key} = @${key}`);
           values[key] = input[key];
@@ -139,6 +151,7 @@ function rowToAgent(row: Record<string, unknown>): Agent {
   return {
     id: row.id as number,
     name: row.name as string,
+    display_name: (row.display_name ?? null) as string | null,
     description: (row.description ?? null) as string | null,
     instructions: (row.instructions ?? null) as string | null,
     soul: (row.soul ?? null) as string | null,
@@ -156,6 +169,7 @@ async function createPostgresAdapter(connectionString: string): Promise<DbAdapte
     CREATE TABLE IF NOT EXISTS agents (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
+      display_name TEXT,
       description TEXT,
       instructions TEXT,
       soul TEXT,
@@ -164,6 +178,13 @@ async function createPostgresAdapter(connectionString: string): Promise<DbAdapte
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE agents ADD COLUMN display_name TEXT;
+    EXCEPTION WHEN duplicate_column THEN NULL;
+    END $$;
   `);
 
   async function getById(id: number): Promise<Agent | undefined> {
@@ -177,8 +198,10 @@ async function createPostgresAdapter(connectionString: string): Promise<DbAdapte
       const res = await pool.query("SELECT * FROM agents WHERE id = $1", [asNum]);
       if (res.rows[0]) return rowToAgent(res.rows[0]);
     }
-    const res = await pool.query("SELECT * FROM agents WHERE lower(name) = lower($1)", [idOrName]);
-    return res.rows[0] ? rowToAgent(res.rows[0]) : undefined;
+    const byName = await pool.query("SELECT * FROM agents WHERE lower(name) = lower($1)", [idOrName]);
+    if (byName.rows[0]) return rowToAgent(byName.rows[0]);
+    const byDisplayName = await pool.query("SELECT * FROM agents WHERE lower(display_name) = lower($1)", [idOrName]);
+    return byDisplayName.rows[0] ? rowToAgent(byDisplayName.rows[0]) : undefined;
   }
 
   return {
@@ -191,9 +214,9 @@ async function createPostgresAdapter(connectionString: string): Promise<DbAdapte
     },
     async createAgent(input) {
       const res = await pool.query(
-        `INSERT INTO agents (name, description, instructions, soul, tools, skills)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [input.name, input.description ?? null, input.instructions ?? null,
+        `INSERT INTO agents (name, display_name, description, instructions, soul, tools, skills)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [input.name, input.display_name ?? null, input.description ?? null, input.instructions ?? null,
          input.soul ?? null, input.tools ?? null, input.skills ?? null]
       );
       return (await getById(res.rows[0].id))!;
@@ -205,7 +228,7 @@ async function createPostgresAdapter(connectionString: string): Promise<DbAdapte
       const setClauses: string[] = [];
       const values: unknown[] = [];
 
-      for (const key of ["name", "description", "instructions", "soul", "tools", "skills"] as const) {
+      for (const key of ["name", "display_name", "description", "instructions", "soul", "tools", "skills"] as const) {
         if (input[key] !== undefined) {
           values.push(input[key]);
           setClauses.push(`${key} = $${values.length}`);

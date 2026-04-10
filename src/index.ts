@@ -17,8 +17,14 @@ import {
 const server = new McpServer(
   { name: "agent-mcp", version: "1.0.0" },
   {
-    instructions:
-      "This server manages a database of AI agents. Each agent has a name, description, instructions, soul, tools, and skills. Use the tools to list, view, create, update, and delete agents.",
+    instructions: [
+      "This server manages a database of AI agents. Each agent has a name, display_name, description, instructions, soul, tools, and skills.",
+      "Use the CRUD tools (list_agents, get_agent, create_agent, update_agent, delete_agent) to manage agent definitions.",
+      "",
+      "To INTERACT with an agent, use ask_agent — it returns the agent's full persona and your message formatted as a prompt.",
+      "When a user addresses an agent by display_name or name (e.g. 'Bob, help me research this topic'), call ask_agent.",
+      "Read the returned prompt carefully and respond as that agent: follow their instructions, embody their soul, stay in character.",
+    ].join("\n"),
   }
 );
 
@@ -46,7 +52,7 @@ server.registerTool(
     const summary = agents
       .map(
         (a, i) =>
-          `${i + 1}. **${a.name}**${a.description ? ` — ${a.description}` : ""} (created: ${a.created_at})`
+          `${i + 1}. **${a.name}**${a.display_name ? ` (${a.display_name})` : ""}${a.description ? ` — ${a.description}` : ""} (created: ${a.created_at})`
       )
       .join("\n");
 
@@ -87,8 +93,10 @@ server.registerTool(
       };
     }
 
+    const displayLabel = agent.display_name ?? agent.name;
+
     const sections = [
-      `# ${agent.name}`,
+      `# ${displayLabel}` + (agent.display_name ? ` (${agent.name})` : ""),
       agent.description ? `**Description:** ${agent.description}` : null,
       agent.instructions
         ? `## Instructions\n${agent.instructions}`
@@ -113,12 +121,18 @@ server.registerTool(
   {
     title: "Create Agent",
     description:
-      "Create a new agent in the database. Provide a name (required) and optionally a description, instructions, soul, tools definition, and skills definition. If the user hasn't provided all details, ask them follow-up questions before calling this tool.",
+      "Create a new agent in the database. Provide a name (required) and optionally a description, instructions, soul, tools definition, and skills definition. If the user hasn't provided all details, ask them follow-up questions before calling this tool. Every agent should have a display_name — a human-friendly name (e.g. 'Alex', 'Maya the Reviewer'). If the user didn't provide one, suggest a fitting name before calling this tool.",
     inputSchema: {
       name: z
         .string()
         .min(1)
         .describe("Unique name for the agent (e.g. 'code-reviewer')"),
+      display_name: z
+        .string()
+        .optional()
+        .describe(
+          "A human-friendly name for the agent (e.g. 'Alex', 'Maya the Reviewer'). If the user didn't provide one, suggest a fitting name."
+        ),
       description: z
         .string()
         .optional()
@@ -151,10 +165,11 @@ server.registerTool(
         ),
     },
   },
-  async ({ name, description, instructions, soul, tools, skills }) => {
+  async ({ name, display_name, description, instructions, soul, tools, skills }) => {
     try {
       const agent = await createAgent({
         name,
+        display_name,
         description,
         instructions,
         soul,
@@ -204,6 +219,10 @@ server.registerTool(
         .string()
         .describe("The name or ID of the agent to update"),
       name: z.string().optional().describe("New name for the agent"),
+      display_name: z
+        .string()
+        .optional()
+        .describe("New human-friendly name for the agent"),
       description: z
         .string()
         .optional()
@@ -226,6 +245,7 @@ server.registerTool(
   async ({
     agent: idOrName,
     name,
+    display_name,
     description,
     instructions,
     soul,
@@ -234,6 +254,7 @@ server.registerTool(
   }) => {
     const updated = await updateAgent(idOrName, {
       name,
+      display_name,
       description,
       instructions,
       soul,
@@ -257,6 +278,53 @@ server.registerTool(
           text: `Agent "${updated.name}" updated successfully.`,
         },
       ],
+    };
+  }
+);
+
+// --- Tool: ask_agent ---
+server.registerTool(
+  "ask_agent",
+  {
+    title: "Ask Agent",
+    description:
+      "Talk to an agent. Looks up the agent by name, display name, or ID, then returns a prompt combining the agent's persona with your message. Use this when a user addresses an agent directly (e.g. 'Bob, help me research AI').",
+    inputSchema: {
+      agent: z
+        .string()
+        .describe("The name, display name, or ID of the agent to talk to"),
+      message: z
+        .string()
+        .describe("The user's message or question for the agent"),
+    },
+  },
+  async ({ agent: idOrName, message }) => {
+    const agent = await getAgent(idOrName);
+    if (!agent) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Agent "${idOrName}" not found. Use list_agents to see available agents.`,
+          },
+        ],
+      };
+    }
+
+    const displayLabel = agent.display_name ?? agent.name;
+    const parts: string[] = [`You are ${displayLabel}.`];
+
+    if (agent.description) parts.push(agent.description);
+    if (agent.instructions) parts.push(`\n## Instructions\n${agent.instructions}`);
+    if (agent.soul) parts.push(`\n## Personality & Tone\n${agent.soul}`);
+    if (agent.tools) parts.push(`\n## Available Tools\n${agent.tools}`);
+    if (agent.skills) parts.push(`\n## Skills\n${agent.skills}`);
+
+    parts.push(`\n---\n\n**User:** ${message}`);
+    parts.push(`\nRespond as ${displayLabel}. Stay in character.`);
+
+    return {
+      content: [{ type: "text" as const, text: parts.join("\n") }],
     };
   }
 );
