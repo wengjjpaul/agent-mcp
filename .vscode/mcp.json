@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "agent-mcp": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/dist/index.js"],
+      "env": {
+        // SQLite: set AGENT_MCP_DB_PATH to the path of your SQLite database file
+        "AGENT_MCP_DB_PATH": "${workspaceFolder}/agents.db"
+
+        // PostgreSQL: set DATABASE_URL instead (takes priority over AGENT_MCP_DB_PATH)
+        // "DATABASE_URL": "postgresql://user:password@localhost:5432/agents"
+      }
+    }
+  }
+}
