@@ -1,5 +1,5 @@
 {
-  "name": "agent-mcp",
+  "name": "@wengjjpaul/agent-mcp",
   "version": "1.0.0",
   "description": "MCP server for managing a database of AI agents",
   "type": "module",

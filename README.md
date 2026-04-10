@@ -16,7 +16,7 @@ Most AI setups scatter agent definitions across config files, prompts, and codeb
 ## Quick Start
 
 ```bash
-npx agent-mcp
+npx @wengjjpaul/agent-mcp
 ```
 
 That's it. Point your MCP client at it (see below) and start managing agents.
@@ -37,7 +37,7 @@ Add to `.vscode/mcp.json`:
     "agent-mcp": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "agent-mcp"],
+      "args": ["-y", "@wengjjpaul/agent-mcp"],
       "env": {
         "DATABASE_URL": "postgresql://user:password@localhost:5432/agents"
       }
@@ -55,7 +55,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "agent-mcp": {
       "command": "npx",
-      "args": ["-y", "agent-mcp"],
+      "args": ["-y", "@wengjjpaul/agent-mcp"],
       "env": {
         "DATABASE_URL": "postgresql://user:password@localhost:5432/agents"
       }
