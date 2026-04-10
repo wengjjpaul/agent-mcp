@@ -1,27 +1,35 @@
 # agent-mcp
 
-An MCP (Model Context Protocol) server that manages a database of AI agents. Each agent stores its instructions, soul/personality, tools, and skills in a shared SQLite database — so any MCP-compatible client (VS Code, Claude Desktop, etc.) can access the same set of agents.
+A shared database of AI agents, exposed over [MCP](https://modelcontextprotocol.io/).
 
-## Features
+Define your agents once — their instructions, personality, tools, and skills — then access them from any MCP client: VS Code, Claude Desktop, OpenCode, or your own.
 
-- **List agents** — see all agents in your database
-- **Get agent details** — view full instructions, soul, tools, and skills
-- **Create agents** — add new agents with structured definitions
-- **Update agents** — modify any field on existing agents
-- **Delete agents** — remove agents from the database
+## Why?
+
+Most AI setups scatter agent definitions across config files, prompts, and codebases. **agent-mcp** puts them in one PostgreSQL (or SQLite) database that any MCP-compatible tool can read and write.
+
+- One source of truth for all your agents
+- Works with any MCP client out of the box
+- Share the same agents across VS Code, Claude Desktop, and more
+- Full CRUD — create, read, update, delete
+
+## Quick Start
+
+```bash
+npx agent-mcp
+```
+
+That's it. Point your MCP client at it (see below) and start managing agents.
 
 ## Setup
 
 ### Prerequisites
 
-- Node.js 18+
-- An MCP-compatible client (VS Code with Copilot, Claude Desktop, etc.)
+- **Node.js 18+**
 
-### Configure your MCP client
+### VS Code
 
-Add the following to your MCP client configuration. The `AGENT_MCP_DB_PATH` environment variable is **required** — it points to the SQLite database file where agents are stored.
-
-#### VS Code (`.vscode/mcp.json`)
+Add to `.vscode/mcp.json`:
 
 ```json
 {
@@ -31,14 +39,16 @@ Add the following to your MCP client configuration. The `AGENT_MCP_DB_PATH` envi
       "command": "npx",
       "args": ["-y", "agent-mcp"],
       "env": {
-        "AGENT_MCP_DB_PATH": "/path/to/your/agents.db"
+        "DATABASE_URL": "postgresql://user:password@localhost:5432/agents"
       }
     }
   }
 }
 ```
 
-#### Claude Desktop (`claude_desktop_config.json`)
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
 
 ```json
 {
@@ -47,29 +57,79 @@ Add the following to your MCP client configuration. The `AGENT_MCP_DB_PATH` envi
       "command": "npx",
       "args": ["-y", "agent-mcp"],
       "env": {
-        "AGENT_MCP_DB_PATH": "/path/to/your/agents.db"
+        "DATABASE_URL": "postgresql://user:password@localhost:5432/agents"
       }
     }
   }
 }
 ```
 
-> **Tip:** Use the same `AGENT_MCP_DB_PATH` across all your MCP clients so every harness shares the same agent database.
+> **Tip:** Use the same `DATABASE_URL` across all your MCP clients to share one agent database.
 
-### Local development
+### SQLite (optional)
+
+If you prefer a local file database, set `AGENT_MCP_DB_PATH` instead of `DATABASE_URL`:
+
+```json
+{
+  "env": {
+    "AGENT_MCP_DB_PATH": "/path/to/your/agents.db"
+  }
+}
+```
+
+## Usage
+
+Once connected, talk to your MCP client naturally:
+
+| You say | What happens |
+|---------|--------------|
+| *"What agents do I have?"* | `list_agents` → shows all agents |
+| *"Show me the code-reviewer agent"* | `get_agent` → full agent details |
+| *"Create an agent for security-focused code review"* | `create_agent` → LLM gathers details, then saves |
+| *"Update code-reviewer to also check performance"* | `update_agent` → modifies specific fields |
+| *"Delete the old test agent"* | `delete_agent` → removes it |
+
+## Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_agents` | List all agents with name, description, and creation date |
+| `get_agent` | Get full details of an agent by name or ID |
+| `create_agent` | Create a new agent (name required, all other fields optional) |
+| `update_agent` | Update any fields on an existing agent |
+| `delete_agent` | Delete an agent by name or ID |
+
+## Agent Schema
+
+Each agent is defined by:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | **Required.** Unique identifier (e.g. `code-reviewer`) |
+| `description` | `string` | Short summary of what the agent does |
+| `instructions` | `string` | Detailed behavioral instructions and workflow |
+| `soul` | `string` | Personality, tone, and communication style |
+| `tools` | `string` | Tools and capabilities available to the agent |
+| `skills` | `string` | Skills the agent possesses |
+
+## Local Development
 
 ```bash
-# Clone and install
+# Install dependencies
 npm install
 
 # Build
 npm run build
 
-# Run directly (for testing)
+# Run (PostgreSQL)
+DATABASE_URL=postgresql://user:password@localhost:5432/agents npm start
+
+# Run (SQLite)
 AGENT_MCP_DB_PATH=./agents.db npm start
 ```
 
-For local dev, point the MCP client at your local build:
+For local dev, point your MCP client at the local build instead of npx:
 
 ```json
 {
@@ -79,44 +139,12 @@ For local dev, point the MCP client at your local build:
       "command": "node",
       "args": ["/absolute/path/to/agent-mcp/dist/index.js"],
       "env": {
-        "AGENT_MCP_DB_PATH": "/path/to/your/agents.db"
+        "DATABASE_URL": "postgresql://user:password@localhost:5432/agents"
       }
     }
   }
 }
 ```
-
-## Tools
-
-| Tool | Description |
-|------|-------------|
-| `list_agents` | List all agents with name, description, and creation date |
-| `get_agent` | Get full details of an agent by name or ID |
-| `create_agent` | Create a new agent with name, description, instructions, soul, tools, skills |
-| `update_agent` | Update any fields on an existing agent |
-| `delete_agent` | Delete an agent by name or ID |
-
-## Agent Schema
-
-Each agent has the following fields:
-
-| Field | Description |
-|-------|-------------|
-| `name` | Unique name for the agent (e.g. `code-reviewer`) |
-| `description` | Short summary of what the agent does |
-| `instructions` | Detailed behavioral instructions and workflow |
-| `soul` | Personality, tone, and communication style |
-| `tools` | Tools/capabilities available to the agent |
-| `skills` | Skills the agent possesses |
-
-## Example Usage
-
-Once configured, you can interact with the agent database through your MCP client:
-
-- *"What agents do I have?"* — calls `list_agents`
-- *"Show me the code-reviewer agent"* — calls `get_agent`
-- *"Create an agent for code review that focuses on security"* — the LLM will ask for details then call `create_agent`
-- *"Update the code-reviewer's instructions to also check for performance"* — calls `update_agent`
 
 ## License
 
